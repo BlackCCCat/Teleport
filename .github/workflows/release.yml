@@ -1,6 +1,10 @@
 name: Release Mac App
 
 on:
+  push:
+    tags:
+      - 'v*'
+      - '*.*.*'
   release:
     types: [published]
   workflow_dispatch:
@@ -74,6 +78,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
         with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             Teleport.dmg
             Teleport-macOS.zip
