@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: Build & Package macOS App
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout repository
@@ -19,8 +19,11 @@ jobs:
 
       - name: Select Xcode 16+
         run: |
-          for xc in /Applications/Xcode_16*.app /Applications/Xcode.app; do
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode*.app || true
+          for xc in $(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V -r); do
             if [ -d "$xc" ]; then
+              echo "Selecting $xc"
               sudo xcode-select -s "$xc"
               break
             fi
