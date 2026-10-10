@@ -17,9 +17,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode Version
+      - name: Select Xcode 16+
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+          for xc in /Applications/Xcode_16*.app /Applications/Xcode.app; do
+            if [ -d "$xc" ]; then
+              sudo xcode-select -s "$xc"
+              break
+            fi
+          done
           xcodebuild -version
 
       - name: Build Teleport (Release)
@@ -53,6 +58,14 @@ jobs:
           rm -rf dmg_root
 
           ls -lh Teleport.dmg Teleport-macOS.zip
+
+      - name: Upload Artifacts to Workflow Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Teleport-macOS
+          path: |
+            Teleport.dmg
+            Teleport-macOS.zip
 
       - name: Upload Artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
