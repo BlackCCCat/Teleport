@@ -72,6 +72,89 @@ enum USBDeviceScript {
         PYTHON
         """#
 
+    static let pythonDiscoveryScript = #"""
+        import asyncio
+        import inspect
+        import json
+        import os
+        import sys
+
+        async def maybe_await(value):
+            if inspect.isawaitable(value):
+                return await value
+            return value
+
+        async def query_device(dev):
+            from pymobiledevice3.lockdown import create_using_usbmux
+            transport = "Wi-Fi" if dev.connection_type == "Network" else "USB"
+            record = {
+                "id": dev.serial,
+                "name": dev.serial,
+                "connection_type": dev.connection_type,
+                "is_available": False,
+                "os_version": "iOS",
+                "details": f"{transport} · unavailable"
+            }
+            ld = None
+            try:
+                ld = await asyncio.wait_for(
+                    maybe_await(create_using_usbmux(dev.serial, connection_type=dev.connection_type, autopair=True)),
+                    timeout=5.0
+                )
+                info = getattr(ld, "short_info", {})
+                name = info.get("DeviceName") or info.get("DeviceClass") or dev.serial
+                version = info.get("ProductVersion", "")
+                build = info.get("BuildVersion", "")
+                os_ver = f"{version} ({build})" if build else (version or "iOS")
+
+                is_dev_mode = False
+                try:
+                    if hasattr(ld, "get_developer_mode_status"):
+                        is_dev_mode = await asyncio.wait_for(maybe_await(ld.get_developer_mode_status()), timeout=3.0)
+                    elif hasattr(ld, "developer_mode_status"):
+                        is_dev_mode = ld.developer_mode_status
+                    else:
+                        is_dev_mode = True
+                except Exception:
+                    is_dev_mode = True
+
+                pairing_state = "paired" if getattr(ld, "paired", True) else "unpaired"
+                dev_mode_str = "dev mode enabled" if is_dev_mode else "dev mode disabled"
+                record["name"] = name
+                record["os_version"] = os_ver
+                record["is_available"] = bool(is_dev_mode and pairing_state == "paired")
+                record["details"] = f"{transport} · {pairing_state} · {dev_mode_str}"
+            except Exception as error:
+                record["details"] = f"{transport} · {str(error)}"
+                record["is_available"] = False
+            finally:
+                if ld is not None and hasattr(ld, "close"):
+                    try:
+                        await maybe_await(ld.close())
+                    except Exception:
+                        pass
+            return record
+
+        async def discover():
+            from pymobiledevice3.usbmux import list_devices
+            try:
+                mux_devices = await maybe_await(list_devices())
+            except Exception as e:
+                print(f"Failed to list devices via usbmux: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            tasks = [query_device(d) for d in mux_devices]
+            results = await asyncio.gather(*tasks) if tasks else []
+            print(json.dumps(results, ensure_ascii=False))
+
+        if __name__ == "__main__":
+            try:
+                asyncio.run(discover())
+            except Exception as error:
+                print(f"Discovery script error: {error}", file=sys.stderr)
+                sys.exit(1)
+        """#
+
     static let pythonHelperScript = #"""
         import asyncio
         import importlib.metadata

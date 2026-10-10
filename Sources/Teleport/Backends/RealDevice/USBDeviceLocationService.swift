@@ -9,9 +9,22 @@ actor USBDeviceLocationService: LocationSimulationService {
     private var connectedDevice: Device?
     private var activeCoordinate: LocationCoordinate?
     private let simulationRunner = USBDeviceSimulationRunner()
+    private var useXcodeEnvironment: Bool =
+        (UserDefaults.standard.object(forKey: AppViewModelPreferences.useXcodeEnvironment) as? Bool) ?? true
+
+    func setUseXcodeEnvironment(_ enabled: Bool) {
+        useXcodeEnvironment = enabled
+    }
 
     func discoverDevices() async throws -> [Device] {
-        TeleportLog.devices.info("Discovering physical devices from CoreDevice")
+        guard useXcodeEnvironment else {
+            TeleportLog.devices.info("Discovering physical devices via pymobiledevice3")
+            let discoveredDevices = try simulationRunner.discoverDevicesViaPymobiledevice3()
+                .sorted { $0.name < $1.name }
+            TeleportLog.devices.info("Discovered \(discoveredDevices.count) physical device(s) via pymobiledevice3")
+            return discoveredDevices
+        }
+        TeleportLog.devices.info("Discovering physical devices from CoreDevice (Xcode)")
         let coreDevices = try loadCoreDeviceDevices()
 
         let discoveredDevices: [Device] =
@@ -19,7 +32,7 @@ actor USBDeviceLocationService: LocationSimulationService {
             .compactMap(makeDiscoveredDevice)
             .sorted { $0.name < $1.name }
 
-        TeleportLog.devices.info("Discovered \(discoveredDevices.count) physical device(s)")
+        TeleportLog.devices.info("Discovered \(discoveredDevices.count) physical device(s) via CoreDevice")
         return discoveredDevices
     }
 

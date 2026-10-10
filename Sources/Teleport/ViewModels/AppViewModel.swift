@@ -83,6 +83,11 @@ final class AppViewModel {
     var routePlaybackSpeedMultiplier: Double = 8.0
     var routePlaybackFixedIntervalSeconds: Double = 0.25
     var routePlaybackTravelSpeedMetersPerSecond: Double = 5.0
+    var useXcodeEnvironment: Bool {
+        didSet {
+            defaults.set(useXcodeEnvironment, forKey: AppViewModelPreferences.useXcodeEnvironment)
+        }
+    }
 
     @ObservationIgnored var movementLoopTask: Task<Void, Never>?
     @ObservationIgnored var routePlaybackTask: Task<Void, Never>?
@@ -92,6 +97,8 @@ final class AppViewModel {
         self.registry = registry
         self.defaults = defaults
         self.suppressUSBPrivilegeNotice = defaults.bool(forKey: AppViewModelPreferences.suppressUSBPrivilegeNotice)
+        let storedXcodePref = defaults.object(forKey: AppViewModelPreferences.useXcodeEnvironment)
+        self.useXcodeEnvironment = (storedXcodePref as? Bool) ?? true
         self.movementSpeedMetersPerSecond = Self.defaultMovementSpeedMetersPerSecond
         self.movementTickIntervalSeconds = Self.defaultMovementTickIntervalSeconds
         self.routePlaybackSpeedMultiplier = Self.defaultRoutePlaybackSpeedMultiplier
@@ -99,6 +106,18 @@ final class AppViewModel {
         self.routePlaybackTravelSpeedMetersPerSecond = Self.defaultRoutePlaybackTravelSpeedMetersPerSecond
         self.savedLocations = Self.loadSavedLocations(from: defaults)
         self.savedRoutes = Self.loadSavedRoutes(from: defaults)
+    }
+
+    func setUseXcodeEnvironment(_ enabled: Bool) {
+        guard useXcodeEnvironment != enabled else { return }
+        useXcodeEnvironment = enabled
+        defaults.set(enabled, forKey: AppViewModelPreferences.useXcodeEnvironment)
+        Task {
+            if connectionState == .connected {
+                await disconnectSelectedDevice()
+            }
+            await refreshDevices()
+        }
     }
 
     var movementControlAvailable: Bool {

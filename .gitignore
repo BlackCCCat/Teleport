@@ -17,7 +17,6 @@ tmp/
 
 # Local macOS/editor files
 .DS_Store
-.github/
 .vscode/
 .nvim/
 

@@ -29,7 +29,13 @@ extension AppViewModel {
         let previousSelectionID = selectedDeviceID
 
         do {
-            async let simulatorDevices = registry.service(for: .simulator)?.discoverDevices() ?? []
+            let usbService = registry.service(for: .physicalUSB) as? USBDeviceLocationService
+            await usbService?.setUseXcodeEnvironment(useXcodeEnvironment)
+
+            async let simulatorDevices =
+                useXcodeEnvironment
+                ? (registry.service(for: .simulator)?.discoverDevices() ?? [])
+                : []
             async let physicalDevices = registry.service(for: .physicalUSB)?.discoverDevices() ?? []
             let discovered = try await simulatorDevices + physicalDevices
             devices = discovered.sorted { $0.name < $1.name }

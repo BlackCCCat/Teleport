@@ -384,4 +384,10 @@ enum TeleportStrings {
     static func minimumSupportedPythonDependencyVersionLine(_ version: String) -> LocalizedStringResource {
         "Minimum supported pymobiledevice3: \(version)"
     }
+
+    static let useXcodeEnvironmentTitle: LocalizedStringResource = "Xcode Environment"
+    static let useXcodeEnvironmentSubtitleOn: LocalizedStringResource = "Device connection via devicectl & simctl"
+    static let useXcodeEnvironmentSubtitleOff: LocalizedStringResource = "Device connection via pymobiledevice3"
+    static let connectDeviceViaUSBOrWifi: LocalizedStringResource = "Connect an iOS device via USB or Wi-Fi."
+    static let connectDeviceOrLaunchSimulator: LocalizedStringResource = "Connect an iOS device or start a Simulator."
 }

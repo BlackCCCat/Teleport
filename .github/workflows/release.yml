@@ -1,0 +1,65 @@
+name: Release Mac App
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Package macOS App
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Build Teleport (Release)
+        run: |
+          xcodebuild -project Teleport.xcodeproj \
+            -scheme Teleport \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package App into DMG and ZIP
+        run: |
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Teleport.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Teleport.app not found!"
+            exit 1
+          fi
+          echo "Found app at: $APP_PATH"
+
+          # 1. Create ZIP
+          ditto -c -k --keepParent "$APP_PATH" "Teleport-macOS.zip"
+
+          # 2. Create DMG
+          mkdir -p dmg_root
+          cp -R "$APP_PATH" dmg_root/
+          ln -s /Applications dmg_root/Applications
+          hdiutil create -volname "Teleport" -srcfolder dmg_root -ov -format UDZO "Teleport.dmg"
+          rm -rf dmg_root
+
+          ls -lh Teleport.dmg Teleport-macOS.zip
+
+      - name: Upload Artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+        with:
+          files: |
+            Teleport.dmg
+            Teleport-macOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

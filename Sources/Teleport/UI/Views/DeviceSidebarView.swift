@@ -14,7 +14,7 @@ struct DeviceSidebarView: View {
                 }
             }
 
-            if !simulatorDevices.isEmpty {
+            if viewModel.useXcodeEnvironment && !simulatorDevices.isEmpty {
                 Section {
                     DisclosureGroup(isExpanded: $showsSimulators) {
                         ForEach(simulatorDevices) { device in
@@ -33,6 +33,35 @@ struct DeviceSidebarView: View {
             }
         }
         .navigationTitle("Devices")
+        .safeAreaInset(edge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider()
+                Toggle(
+                    isOn: Binding(
+                        get: { viewModel.useXcodeEnvironment },
+                        set: { newValue in
+                            viewModel.setUseXcodeEnvironment(newValue)
+                        }
+                    )
+                ) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(TeleportStrings.useXcodeEnvironmentTitle)
+                            .font(.subheadline.weight(.medium))
+                        Text(
+                            viewModel.useXcodeEnvironment
+                                ? TeleportStrings.useXcodeEnvironmentSubtitleOn
+                                : TeleportStrings.useXcodeEnvironmentSubtitleOff
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            }
+            .background(.bar)
+        }
     }
 
     private var physicalDevices: [Device] {

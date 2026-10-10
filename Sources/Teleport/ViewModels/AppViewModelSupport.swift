@@ -4,6 +4,7 @@ enum AppViewModelPreferences {
     static let suppressUSBPrivilegeNotice = "suppressUSBPrivilegeNotice"
     static let savedRoutes = "savedRoutes"
     static let savedLocations = "savedLocations"
+    static let useXcodeEnvironment = "useXcodeEnvironment"
 }
 
 struct MovementControlVector: Equatable, Sendable {

@@ -1,6 +1,56 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Xcode Environment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 环境"
+          }
+        }
+      }
+    },
+    "Device connection via devicectl & simctl" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 devicectl 与 simctl 连接"
+          }
+        }
+      }
+    },
+    "Device connection via pymobiledevice3" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 pymobiledevice3 连接"
+          }
+        }
+      }
+    },
+    "Connect an iOS device via USB or Wi-Fi." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 USB 或 Wi-Fi 连接 iOS 设备。"
+          }
+        }
+      }
+    },
+    "Connect an iOS device or start a Simulator." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 iOS 设备或启动模拟器。"
+          }
+        }
+      }
+    },
     "%@ · iOS %@" : {
       "localizations" : {
         "zh-Hans" : {

@@ -26,6 +26,24 @@ final class USBDeviceSimulationRunner {
         }
     }
 
+    private struct Pymobiledevice3DiscoveredDeviceRecord: Decodable {
+        let id: String
+        let name: String
+        let connectionType: String
+        let isAvailable: Bool
+        let osVersion: String
+        let details: String
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case connectionType = "connection_type"
+            case isAvailable = "is_available"
+            case osVersion = "os_version"
+            case details
+        }
+    }
+
     private let sudoURL: URL
     private let shellURL: URL
     private let envURL: URL
@@ -49,6 +67,40 @@ final class USBDeviceSimulationRunner {
 
     func resolvedPythonInstallCommandForDisplay() -> String? {
         try? resolvedHelperPythonEnvironment().installCommand
+    }
+
+    func discoverDevicesViaPymobiledevice3() throws -> [Device] {
+        let pythonEnvironment = try resolvedHelperPythonEnvironment()
+        try validateResolvedPythonEnvironment(pythonEnvironment)
+
+        let helperDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "teleport-helper",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: helperDirectory, withIntermediateDirectories: true)
+        let scriptURL = helperDirectory.appendingPathComponent("discover-" + UUID().uuidString + ".py")
+        try USBDeviceScript.pythonDiscoveryScript.write(to: scriptURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: scriptURL) }
+
+        var arguments = helperEnvironmentAssignments(sitePaths: pythonEnvironment.sitePaths)
+        arguments.append(pythonEnvironment.executable)
+        arguments.append(scriptURL.path)
+
+        TeleportLog.devices.debug("Executing pymobiledevice3 discovery script")
+        let output = try CommandRunner.run(envURL, arguments: arguments)
+
+        let records = try JSONDecoder().decode([Pymobiledevice3DiscoveredDeviceRecord].self, from: output.stdout)
+        return records.map { record in
+            let kind: DeviceKind = (record.connectionType == "Network") ? .physicalNetwork : .physicalUSB
+            return Device(
+                id: record.id,
+                name: record.name,
+                kind: kind,
+                osVersion: record.osVersion,
+                isAvailable: record.isAvailable,
+                details: record.details
+            )
+        }
     }
 
     func hasActiveSimulationSession() -> Bool {
