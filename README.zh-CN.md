@@ -8,13 +8,20 @@
   <p>
     <img src="https://img.shields.io/badge/platform-macOS-34C759" alt="macOS 应用" />
     <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT 许可证" />
-    <a href="https://github.com/samuelhe52/Teleport/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC-007AFF?logo=apple&logoColor=white" alt="下载最新版 Teleport" /></a>
+    <a href="https://github.com/BlackCCCat/Teleport/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC-007AFF?logo=apple&logoColor=white" alt="下载最新版 Teleport" /></a>
   </p>
 
   <p><a href="README.md">English</a> · <a href="#安装">安装</a></p>
 </div>
 
 ---
+
+> [!NOTE]
+> **Fork 说明与改动：**
+> 本项目基于原版 [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport) 进行增强与定制：
+> - **解耦 Xcode 环境选项**：在应用左侧栏底部增加了“Xcode 环境”开关。关闭后，真机设备（USB 与 Wi-Fi）将完全通过 Python `pymobiledevice3` 纯协议栈发现与连接，**彻底摆脱对 Xcode 及 `xcrun devicectl` 的强依赖**。
+> - **状态持久化**：开关状态会自动记住（存储于 `UserDefaults`），重启应用或电脑后依旧保持上次设置。
+> - **自动打包发布**：新增 GitHub Actions 工作流，发布 GitHub Release 时自动编译打包 macOS `.dmg` 与 `.zip` 安装包。
 
 Teleport 基于 SwiftUI 和 MapKit 构建。在地图上点一个位置，按下 Simulate，设备就以为自己在那里。
 
@@ -24,17 +31,9 @@ Teleport 基于 SwiftUI 和 MapKit 构建。在地图上点一个位置，按下
 
 ## 安装
 
-### Homebrew
-
-```sh
-brew tap samuelhe52/teleport
-brew trust --cask samuelhe52/teleport/teleport-location
-brew install --cask teleport-location
-```
-
 ### 直接下载
 
-从 [Releases](https://github.com/samuelhe52/Teleport/releases) 下载最新 `.dmg`，将 `Teleport.app` 拖入应用程序文件夹，然后启动。
+从 [Releases](https://github.com/BlackCCCat/Teleport/releases) 下载最新 `.dmg`，将 `Teleport.app` 拖入应用程序文件夹，然后启动。
 
 ## 功能
 

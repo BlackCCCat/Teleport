@@ -8,13 +8,20 @@
   <p>
     <img src="https://img.shields.io/badge/platform-macOS-34C759" alt="macOS app" />
     <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" />
-    <a href="https://github.com/samuelhe52/Teleport/releases/latest"><img src="https://img.shields.io/badge/Download-Latest%20release-007AFF?logo=apple&logoColor=white" alt="Download the latest Teleport release" /></a>
+    <a href="https://github.com/BlackCCCat/Teleport/releases/latest"><img src="https://img.shields.io/badge/Download-Latest%20release-007AFF?logo=apple&logoColor=white" alt="Download the latest Teleport release" /></a>
   </p>
 
   <p><a href="README.zh-CN.md">简体中文</a> · <a href="#install">Install</a></p>
 </div>
 
 ---
+
+> [!NOTE]
+> **Fork Differences / Improvements:**
+> This fork is based on [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport).
+> - **Xcode Environment Toggle**: Added a toggle switch in the left sidebar to enable/disable Xcode environment dependency. When turned off, physical devices (USB & Wi-Fi) are discovered and connected purely via `pymobiledevice3`, allowing location simulation **without needing Xcode or `xcrun devicectl` installed**.
+> - **Persistent State**: The toggle state is remembered across application restarts (`UserDefaults`).
+> - **Automated Release**: Added GitHub Actions workflow to automatically package and attach macOS `.dmg` and `.zip` bundles on GitHub Release.
 
 Teleport is built with SwiftUI and MapKit. Click somewhere on the map, hit Simulate, and your device thinks it's there.
 
@@ -24,17 +31,9 @@ Teleport is built with SwiftUI and MapKit. Click somewhere on the map, hit Simul
 
 ## Install
 
-### Homebrew
-
-```sh
-brew tap samuelhe52/teleport
-brew trust --cask samuelhe52/teleport/teleport-location
-brew install --cask teleport-location
-```
-
 ### Direct download
 
-Download the latest `.dmg` from [Releases](https://github.com/samuelhe52/Teleport/releases), drag `Teleport.app` to Applications, and launch it.
+Download the latest `.dmg` from [Releases](https://github.com/BlackCCCat/Teleport/releases), drag `Teleport.app` to Applications, and launch it.
 
 ## What It Does
 
