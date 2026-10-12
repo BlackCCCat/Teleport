@@ -8,6 +8,7 @@ without launching the Teleport GUI application.
 import argparse
 import asyncio
 import json
+import math
 import os
 import signal
 import subprocess
@@ -17,6 +18,78 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 SESSION_DIR = Path.home() / ".teleport" / "sessions"
+
+
+class ChinaCoordinateTransform:
+    """
+    1:1 port of Teleport's ChinaCoordinateTransform in LocationCoordinate.swift.
+    Handles GCJ-02 (displayed in Chinese Apple Maps / MapKit) to WGS-84 (hardware GPS / DVT simulation)
+    transformation for coordinates within mainland China.
+    """
+    a = 6378245.0
+    ee = 0.00669342162296594323
+    pi = math.pi
+
+    @classmethod
+    def applies_to_china(cls, lat: float, lng: float) -> bool:
+        return 18.0 <= lat <= 54.5 and 73.5 <= lng <= 135.1
+
+    @classmethod
+    def _transform_lat(cls, x: float, y: float) -> float:
+        val = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y
+        val += 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+        val += (20.0 * math.sin(6.0 * x * cls.pi) + 20.0 * math.sin(2.0 * x * cls.pi)) * 2.0 / 3.0
+        val += (20.0 * math.sin(y * cls.pi) + 40.0 * math.sin(y / 3.0 * cls.pi)) * 2.0 / 3.0
+        val += (160.0 * math.sin(y / 12.0 * cls.pi) + 320.0 * math.sin(y * cls.pi / 30.0)) * 2.0 / 3.0
+        return val
+
+    @classmethod
+    def _transform_lng(cls, x: float, y: float) -> float:
+        val = 300.0 + x + 2.0 * y + 0.1 * x * x
+        val += 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+        val += (20.0 * math.sin(6.0 * x * cls.pi) + 20.0 * math.sin(2.0 * x * cls.pi)) * 2.0 / 3.0
+        val += (20.0 * math.sin(x * cls.pi) + 40.0 * math.sin(x / 3.0 * cls.pi)) * 2.0 / 3.0
+        val += (150.0 * math.sin(x / 12.0 * cls.pi) + 300.0 * math.sin(x / 30.0 * cls.pi)) * 2.0 / 3.0
+        return val
+
+    @classmethod
+    def _delta(cls, lat: float, lng: float) -> Tuple[float, float]:
+        rad_lat = lat / 180.0 * cls.pi
+        magic = math.sin(rad_lat)
+        magic = 1 - cls.ee * magic * magic
+        sqrt_magic = math.sqrt(magic)
+        d_lat = (cls._transform_lat(lng - 105.0, lat - 35.0) * 180.0) / ((cls.a * (1 - cls.ee)) / (magic * sqrt_magic) * cls.pi)
+        d_lng = (cls._transform_lng(lng - 105.0, lat - 35.0) * 180.0) / (cls.a / sqrt_magic * math.cos(rad_lat) * cls.pi)
+        return d_lat, d_lng
+
+    @classmethod
+    def wgs84_to_gcj02(cls, lat: float, lng: float) -> Tuple[float, float]:
+        d_lat, d_lng = cls._delta(lat, lng)
+        return lat + d_lat, lng + d_lng
+
+    @classmethod
+    def gcj02_to_wgs84(cls, lat: float, lng: float) -> Tuple[float, float]:
+        t_lat, t_lng = cls.wgs84_to_gcj02(lat, lng)
+        return lat * 2 - t_lat, lng * 2 - t_lng
+
+    @classmethod
+    def to_simulation_coordinate(cls, lat: float, lng: float) -> Tuple[float, float]:
+        """
+        Converts displayed/map coordinates (GCJ-02 in China) to simulation/hardware GPS coordinates (WGS-84).
+        Matches Teleport App's ChinaCoordinateTransform.simulationCoordinate(fromDisplayed:).
+        """
+        if not cls.applies_to_china(lat, lng):
+            return lat, lng
+        return cls.gcj02_to_wgs84(lat, lng)
+
+    @classmethod
+    def to_display_coordinate(cls, lat: float, lng: float) -> Tuple[float, float]:
+        """
+        Converts hardware GPS coordinates (WGS-84) to displayed map coordinates (GCJ-02 in China).
+        """
+        if not cls.applies_to_china(lat, lng):
+            return lat, lng
+        return cls.wgs84_to_gcj02(lat, lng)
 
 
 def ensure_session_dir():
@@ -286,7 +359,15 @@ def is_pid_alive(pid: int) -> bool:
 
 # ---------------- Daemon Implementation ----------------
 
-async def run_daemon(udid: str, device_name: str, initial_lat: float, initial_lng: float, loc_name: Optional[str]):
+async def run_daemon(
+    udid: str,
+    device_name: str,
+    sim_lat: float,
+    sim_lng: float,
+    loc_name: Optional[str],
+    disp_lat: Optional[float] = None,
+    disp_lng: Optional[float] = None
+):
     sock_path, info_path = get_session_paths(udid)
     sock_path.unlink(missing_ok=True)
 
@@ -295,8 +376,10 @@ async def run_daemon(udid: str, device_name: str, initial_lat: float, initial_ln
     DvtProvider = dvt_provider_class()
     provider = await get_service_provider(udid)
 
-    current_lat = initial_lat
-    current_lng = initial_lng
+    current_sim_lat = sim_lat
+    current_sim_lng = sim_lng
+    current_disp_lat = disp_lat if disp_lat is not None else sim_lat
+    current_disp_lng = disp_lng if disp_lng is not None else sim_lng
     current_name = loc_name or ""
     running = True
 
@@ -305,8 +388,10 @@ async def run_daemon(udid: str, device_name: str, initial_lat: float, initial_ln
             json.dump({
                 "udid": udid,
                 "device_name": device_name,
-                "latitude": current_lat,
-                "longitude": current_lng,
+                "latitude": current_disp_lat,
+                "longitude": current_disp_lng,
+                "sim_latitude": current_sim_lat,
+                "sim_longitude": current_sim_lng,
                 "name": current_name,
                 "status": status,
                 "pid": os.getpid(),
@@ -319,25 +404,39 @@ async def run_daemon(udid: str, device_name: str, initial_lat: float, initial_ln
             await maybe_await(sim.connect())
 
         await maybe_await(sim.clear())
-        await maybe_await(sim.set(current_lat, current_lng))
+        await maybe_await(sim.set(current_sim_lat, current_sim_lng))
         save_state("simulating")
 
         async def handle_client(reader, writer):
-            nonlocal current_lat, current_lng, current_name, running
+            nonlocal current_sim_lat, current_sim_lng, current_disp_lat, current_disp_lng, current_name, running
             data = await reader.readline()
             if not data:
                 writer.close()
                 return
             cmd = data.decode("utf-8").strip()
-            parts = cmd.split(maxsplit=3)
+            parts = cmd.split(maxsplit=5)
             action = parts[0].upper() if parts else ""
 
             if action == "SET" and len(parts) >= 3:
                 try:
-                    current_lat = float(parts[1])
-                    current_lng = float(parts[2])
-                    current_name = parts[3] if len(parts) > 3 else ""
-                    await maybe_await(sim.set(current_lat, current_lng))
+                    # Message protocol: SET <sim_lat> <sim_lng> [disp_lat disp_lng name...]
+                    current_sim_lat = float(parts[1])
+                    current_sim_lng = float(parts[2])
+                    if len(parts) >= 5:
+                        try:
+                            current_disp_lat = float(parts[3])
+                            current_disp_lng = float(parts[4])
+                            current_name = parts[5] if len(parts) > 5 else ""
+                        except ValueError:
+                            current_disp_lat = current_sim_lat
+                            current_disp_lng = current_sim_lng
+                            current_name = " ".join(parts[3:])
+                    else:
+                        current_disp_lat = current_sim_lat
+                        current_disp_lng = current_sim_lng
+                        current_name = parts[3] if len(parts) > 3 else ""
+
+                    await maybe_await(sim.set(current_sim_lat, current_sim_lng))
                     save_state("simulating")
                     writer.write(b"OK\n")
                 except Exception as ex:
@@ -356,7 +455,7 @@ async def run_daemon(udid: str, device_name: str, initial_lat: float, initial_ln
                 finally:
                     running = False
             elif action == "STATUS":
-                writer.write(f"{current_lat},{current_lng},{current_name}\n".encode("utf-8"))
+                writer.write(f"{current_disp_lat},{current_disp_lng},{current_sim_lat},{current_sim_lng},{current_name}\n".encode("utf-8"))
             else:
                 writer.write(b"ERR Unknown command\n")
 
@@ -588,26 +687,45 @@ def cmd_set(args):
         print("  teleport set <location_name_from_favorites>", file=sys.stderr)
         sys.exit(1)
 
+    # Coordinate transform (matches Teleport App's ChinaCoordinateTransform)
+    is_raw_wgs84 = getattr(args, "wgs84", False)
+    if is_raw_wgs84:
+        disp_lat, disp_lng = lat, lng
+        sim_lat, sim_lng = lat, lng
+        was_transformed = False
+    else:
+        disp_lat, disp_lng = lat, lng
+        sim_lat, sim_lng = ChinaCoordinateTransform.to_simulation_coordinate(disp_lat, disp_lng)
+        was_transformed = (sim_lat != disp_lat or sim_lng != disp_lng)
+
+    def print_coord_details():
+        if was_transformed:
+            print(f"  Map Coordinate (GCJ-02): {disp_lat:.6f}, {disp_lng:.6f}" + (f" ({loc_name})" if loc_name else ""))
+            print(f"  Simulation GPS (WGS-84): {sim_lat:.6f}, {sim_lng:.6f} (Applied China transform to match Teleport App)")
+        else:
+            print(f"  Coordinates: {disp_lat:.6f}, {disp_lng:.6f}" + (f" ({loc_name})" if loc_name else ""))
+
     if is_simulator:
         # Simulate via simctl
-        cmd = ["xcrun", "simctl", "location", udid, "set", f"{lat},{lng}"]
+        cmd = ["xcrun", "simctl", "location", udid, "set", f"{sim_lat},{sim_lng}"]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             print(f"Error setting simulator location: {proc.stderr.strip()}", file=sys.stderr)
             sys.exit(1)
-        print(f"✓ Location set on Simulator '{name}': {lat}, {lng}" + (f" ({loc_name})" if loc_name else ""))
+        print(f"✓ Location set on Simulator '{name}':")
+        print_coord_details()
         return
 
     sock_path, info_path = get_session_paths(udid)
 
     # 1. If foreground hold requested
     if args.hold:
-        # Stop existing background daemon if running
         send_daemon_command(sock_path, "STOP")
-        print(f"Simulating location on '{name}' ({udid}): {lat}, {lng}" + (f" ({loc_name})" if loc_name else ""))
+        print(f"Simulating location on '{name}' ({udid}):")
+        print_coord_details()
         print("Holding simulation session. Press Ctrl+C to stop...")
         try:
-            asyncio.run(run_daemon(udid, name, lat, lng, loc_name))
+            asyncio.run(run_daemon(udid, name, sim_lat, sim_lng, loc_name, disp_lat, disp_lng))
         except KeyboardInterrupt:
             print("\nSimulation stopped.")
         return
@@ -615,10 +733,10 @@ def cmd_set(args):
     # 2. Check if a background daemon is already running for this device
     active = get_active_session_info(udid)
     if active and sock_path.exists():
-        resp = send_daemon_command(sock_path, f"SET {lat} {lng} {loc_name}")
+        resp = send_daemon_command(sock_path, f"SET {sim_lat} {sim_lng} {disp_lat} {disp_lng} {loc_name}")
         if resp == "OK":
             print(f"✓ Updated simulated location for '{name}':")
-            print(f"  Coordinates: {lat}, {lng}" + (f" ({loc_name})" if loc_name else ""))
+            print_coord_details()
             print(f"  Session PID: {active.get('pid')} (Running in background)")
             return
 
@@ -632,9 +750,11 @@ def cmd_set(args):
         "_daemon",
         udid,
         name,
-        str(lat),
-        str(lng),
-        loc_name
+        str(sim_lat),
+        str(sim_lng),
+        loc_name,
+        str(disp_lat),
+        str(disp_lng)
     ]
 
     proc = subprocess.Popen(
@@ -657,7 +777,7 @@ def cmd_set(args):
     if ready:
         print(f"✓ Successfully simulated location for '{name}':")
         print(f"  Device UDID: {udid}")
-        print(f"  Coordinates: {lat}, {lng}" + (f" ({loc_name})" if loc_name else ""))
+        print_coord_details()
         print(f"  Background PID: {proc.pid}")
         print("  To restore original location: teleport clear")
     else:
@@ -746,7 +866,16 @@ def cmd_status(args):
     print("=== Active Simulation Sessions ===")
     for s in active_sessions:
         started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s.get("started_at", time.time())))
-        loc_str = f"{s['latitude']}, {s['longitude']}"
+        disp_lat = s.get("latitude")
+        disp_lng = s.get("longitude")
+        sim_lat = s.get("sim_latitude")
+        sim_lng = s.get("sim_longitude")
+
+        if sim_lat is not None and (sim_lat != disp_lat or sim_lng != disp_lng):
+            loc_str = f"{disp_lat:.6f}, {disp_lng:.6f} [GCJ-02] -> {sim_lat:.6f}, {sim_lng:.6f} [WGS-84 GPS]"
+        else:
+            loc_str = f"{disp_lat:.6f}, {disp_lng:.6f}"
+
         if s.get("name"):
             loc_str += f" ({s['name']})"
         print(f" • Device: {s['device_name']} ({s['udid']})")
@@ -780,6 +909,7 @@ def main():
     p_set.add_argument("longitude", nargs="?", type=float, default=None, help="Longitude (required if target is latitude)")
     p_set.add_argument("-d", "--device", type=str, help="Device UDID or name (auto-selected if only 1 device)")
     p_set.add_argument("-n", "--name", type=str, help="Human-readable location name (e.g. 'Beijing')")
+    p_set.add_argument("--wgs84", "--raw", action="store_true", dest="wgs84", help="Coordinates are already raw WGS-84 GPS (skip GCJ-02 to WGS-84 transform)")
     p_set.add_argument("--hold", action="store_true", help="Hold simulation in foreground (stop with Ctrl+C)")
 
     # clear
@@ -794,14 +924,16 @@ def main():
     p_daemon = subparsers.add_parser("_daemon", help=argparse.SUPPRESS)
     p_daemon.add_argument("udid")
     p_daemon.add_argument("name")
-    p_daemon.add_argument("lat", type=float)
-    p_daemon.add_argument("lng", type=float)
+    p_daemon.add_argument("sim_lat", type=float)
+    p_daemon.add_argument("sim_lng", type=float)
     p_daemon.add_argument("loc_name", nargs="?", default="")
+    p_daemon.add_argument("disp_lat", nargs="?", type=float, default=None)
+    p_daemon.add_argument("disp_lng", nargs="?", type=float, default=None)
 
     args = parser.parse_args()
 
     if args.command == "_daemon":
-        asyncio.run(run_daemon(args.udid, args.name, args.lat, args.lng, args.loc_name))
+        asyncio.run(run_daemon(args.udid, args.name, args.sim_lat, args.sim_lng, args.loc_name, args.disp_lat, args.disp_lng))
         return
 
     if args.command in ("devices", "list"):
