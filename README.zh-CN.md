@@ -18,10 +18,12 @@
 
 > [!NOTE]
 > **Fork 说明与改动：**
-> 本项目基于原版 [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport) 进行增强与定制：
 > - **解耦 Xcode 环境选项**：在应用左侧栏底部增加了“Xcode 环境”开关。关闭后，真机设备（USB 与 Wi-Fi）将完全通过 Python `pymobiledevice3` 纯协议栈发现与连接，**彻底摆脱对 Xcode 及 `xcrun devicectl` 的强依赖**。
-> - **免密码/免提权模拟选项**：在左侧栏底部新增“免密码提权模拟”开关，默认开启。采用 iOS 17+ 原生/用户态通道直连，**彻底告别每次模拟定位时频繁弹出管理员密码或 Touch ID 指纹验证的烦扰**。
-> - **独立 CLI 命令行工具与 AI Skill (`teleport`)**：新增轻量级 CLI 工具（`teleport devices` / `teleport set <lat> <lng>` / `teleport clear`），支持在不启动 Teleport 窗口的情况下进行设备连接与定位模拟，方便终端运维与 AI Agent 自动化调度。
+> - **免密码/免提权模拟选项**：在左侧栏底部新增“免密码提权模拟”开关，默认开启。采用 iOS 17+ 原生/用户态免提权通道直连，**彻底告别每次模拟定位时频繁弹出管理员密码或 Touch ID 指纹验证的烦扰**。
+> - **独立 CLI 命令行工具 (`teleport`)**：无需打开图形界面，即可通过终端完整控制设备发现、连通性检测、定位模拟与还原，更适合自动化脚本与终端极客。
+> - **无感自动连接与连通性检测**：执行 `teleport set` 时自动识别设备并建立隧道；同时提供 `teleport connect` 显式检测设备握手状态与延迟。
+> - **GUI 收藏夹无缝同步与按地点名称定位**：CLI 自动读取 Teleport App 中保存的收藏地点（`teleport locations`），并支持直接使用地点名称进行模拟定位（`teleport set "工作打卡"`），支持精确匹配与模糊搜索。
+> - **AI Agent 原生集成**：内置 AI 技能包 (`teleport-location`)，让 AI 助手可通过自然语言对话帮用户查询收藏、一键修改手机定位。
 > - **状态持久化**：开关状态会自动记住（存储于 `UserDefaults`），重启应用或电脑后依旧保持上次设置。
 > - **自动打包发布**：新增 GitHub Actions 工作流，发布 GitHub Release 时自动编译打包 macOS `.dmg` 与 `.zip` 安装包。
 
@@ -111,6 +113,83 @@ xcodebuild -project Teleport.xcodeproj -scheme Teleport -destination 'platform=m
 7. 完成后点击 `Stop`。
 
 真机可能会在首次运行时请求管理员授权、提示安装 Python 依赖，或需要先通过 USB 连接一次才能启用 Wi-Fi 发现。
+
+## 命令行工具 (CLI)
+
+Teleport 配备了功能完善的无头命令行工具（`teleport`），支持在不启动 GUI 图形应用的情况下完成所有定位模拟操作。其全程运行于普通用户态，无需输入 root 密码，支持设备自动识别与连接，并原生适配 AI Agent。
+
+### 安装配置
+
+将 CLI 软链接到你的系统的 `PATH` 路径中：
+
+```sh
+ln -sf $(pwd)/bin/teleport ~/.local/bin/teleport
+```
+
+### 核心工作流与使用示例
+
+#### 1. 设备发现与健康检测
+```sh
+# 列出所有已连接的实体 iPhone 及运行中的 iOS 模拟器
+teleport devices
+teleport devices --json
+
+# 测试设备握手连通性与隧道延迟
+teleport connect
+```
+*提示：当仅有一台设备连接时，`teleport` 将全自动选定该设备，无需手动输入 UDID。*
+
+#### 2. 读取收藏夹与按地点名称模拟定位
+CLI 会直接同步你在 Teleport macOS 界面中收藏的地点：
+
+```sh
+# 查看所有已收藏的地点与经纬度
+teleport locations
+teleport locations --json
+
+# 直接使用收藏地点名称进行定位（支持完全匹配与模糊搜索）
+teleport set "工作打卡"
+teleport set "公司"
+teleport set "故宫"
+```
+
+#### 3. 按指定经纬度模拟定位
+```sh
+# 模拟到北京故宫
+teleport set 39.9163 116.3972 --name "故宫"
+
+# 模拟到上海外滩
+teleport set 31.2400 121.4900 --name "外滩"
+
+# 多设备连接时指定特定设备
+teleport set 37.3349 -122.0090 --device 00008140-001E0C291E33001C --name "Apple Park"
+```
+*内部机制：首次执行 `set` 会在后台静默启动常驻守护进程。后续切换位置时通过本地 Socket 热更新，耗时 `< 0.1s`，无需重新握手。*
+
+#### 4. 模拟状态查看与重置
+```sh
+# 查看当前活跃的模拟定位会话与坐标
+teleport status
+
+# 停止模拟，恢复设备真实的 GPS 定位
+teleport clear
+```
+
+### CLI 命令速查表
+
+| 指令 | 作用说明 |
+| :--- | :--- |
+| `teleport devices` | 列出已连接的真机与模拟器 |
+| `teleport connect` | 测试设备连通性与隧道延迟（支持 `--json`） |
+| `teleport locations` | 读取 Teleport App 中的所有收藏地点（支持 `--json`） |
+| `teleport set <地点名>` | **直接按收藏夹名称进行模拟定位（支持模糊搜索）** |
+| `teleport set <纬度> <经度>` | 按具体经纬度数值进行模拟定位 |
+| `teleport status` | 显示后台正在运行的模拟定位会话 |
+| `teleport clear` | 停止模拟并恢复手机真实 GPS 定位 |
+
+### AI Agent 联动
+
+Teleport 附带了开箱即用的 AI 技能配置 (`teleport-location`)。配置后，AI 助手可以通过自然语言理解直接帮用户查收藏、换位置（例如：“帮我把手机定位改到工作打卡”），全程无需人工操作。
 
 ## 开发
 

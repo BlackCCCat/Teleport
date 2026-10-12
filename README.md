@@ -18,12 +18,14 @@
 
 > [!NOTE]
 > **Fork Differences / Improvements:**
-> This fork is based on [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport).
 > - **Xcode Environment Toggle**: Added a toggle switch in the left sidebar to enable/disable Xcode environment dependency. When turned off, physical devices (USB & Wi-Fi) are discovered and connected purely via `pymobiledevice3`, allowing location simulation **without needing Xcode or `xcrun devicectl` installed**.
-> - **Passwordless Simulation (No Sudo/Touch ID Prompt)**: Added a toggle to run location simulation rootless. Using native/userspace tunnels, device location can be simulated immediately without prompting for administrator password or Touch ID every time.
-> - **Headless CLI & AI Skill (`teleport`)**: Standalone command-line tool (`teleport devices`, `teleport locations`, `teleport set <name|lat lng>`, `teleport connect`, `teleport clear`) that works without opening the GUI app, reading favorite places directly and supporting automated control by scripts and AI agents.
-> - **Persistent State**: Toggle states are remembered across application restarts (`UserDefaults`).
-> - **Automated Release**: Added GitHub Actions workflow to automatically package and attach macOS `.dmg` and `.zip` bundles on GitHub Release.
+> - **Passwordless / Rootless Simulation**: Added a toggle to run location simulation rootless. Using native/userspace tunnels, device location can be simulated immediately without prompting for administrator password or Touch ID every time.
+> - **Headless CLI Tool (`teleport`)**: Standalone command-line tool that operates without opening the GUI application, perfect for scripts, terminal lovers, and automation pipelines.
+> - **Zero-Config Auto Connection & Health Checks**: Running `teleport set` automatically discovers connected devices and establishes the DVT tunnel in the background. An explicit `teleport connect` command is also available for connectivity and latency diagnostics.
+> - **Direct GUI Favorites Synchronization**: CLI directly reads user favorite places saved in the macOS app (`teleport locations`) and allows simulating location by name (`teleport set "工作打卡"` or `teleport set "Office"`), supporting fuzzy search.
+> - **AI Agent Integration**: Preconfigured AI Skill (`teleport-location`) enabling conversational AI to check status, pick favorites, and teleport devices hands-free.
+> - **Persistent Preferences**: Toggle states are remembered across application restarts (`UserDefaults`).
+> - **Automated Release**: GitHub Actions workflow automatically packages and attaches notarized/clean macOS `.dmg` and `.zip` bundles on GitHub Release.
 
 Teleport is built with SwiftUI and MapKit. Click somewhere on the map, hit Simulate, and your device thinks it's there.
 
@@ -114,31 +116,80 @@ For physical devices, Teleport might ask for admin approval on first run, walk y
 
 ## Command Line Interface (CLI)
 
-Teleport provides a headless CLI tool to control location simulation without opening the GUI application:
+Teleport includes a powerful, headless CLI tool (`teleport`) that allows full location simulation control without opening the GUI application. It runs in user space without requiring administrator passwords, automatically connects devices, and can be driven by terminal commands or AI agents.
+
+### Setup
+
+Symlink the CLI tool to your `PATH`:
 
 ```sh
-# Symlink CLI to your PATH (if not already done)
 ln -sf $(pwd)/bin/teleport ~/.local/bin/teleport
+```
 
-# 1. List connected iOS devices & simulators
+### Quick Start & Common Workflows
+
+#### 1. Device Discovery & Health Check
+```sh
+# List all connected physical devices and iOS Simulators
 teleport devices
+teleport devices --json
 
-# 2. Test device connection & tunnel health
+# Test handshake connectivity and tunnel latency
 teleport connect
+```
+*Note: If only one device is connected, `teleport` automatically selects it for all operations.*
 
-# 3. List saved favorite locations (from Teleport app)
+#### 2. Saved Favorites & Named Simulation
+The CLI directly synchronizes with favorites configured in the Teleport macOS app:
+
+```sh
+# View all saved favorite locations
 teleport locations
+teleport locations --json
 
-# 4. Simulate location (auto-connects device, no sudo required)
-teleport set "工作打卡"                     # by favorite name
-teleport set 39.9042 116.4074 --name "北京" # by coordinates
+# Simulate location by favorite place name (supports exact & fuzzy matching)
+teleport set "工作打卡"
+teleport set "Apple Park"
+teleport set "公司"
+```
 
-# 5. Check active simulation status
+#### 3. Coordinate-Based Simulation
+```sh
+# Teleport to Beijing Palace Museum (Forbidden City)
+teleport set 39.9163 116.3972 --name "Forbidden City"
+
+# Teleport to Shanghai The Bund
+teleport set 31.2400 121.4900 --name "The Bund"
+
+# Target a specific device (if multiple are connected)
+teleport set 37.3349 -122.0090 --device 00008140-001E0C291E33001C --name "Apple Park"
+```
+*Behind the scenes: The first `set` command launches an invisible background daemon. Subsequent location updates switch instantly in `< 0.1s` without reconnecting.*
+
+#### 4. Session Monitoring & Reset
+```sh
+# Check current active simulation session and coordinates
 teleport status
 
-# 6. Clear simulation and restore real GPS
+# Stop simulation and restore genuine GPS
 teleport clear
 ```
+
+### CLI Command Summary
+
+| Command | Description |
+| :--- | :--- |
+| `teleport devices` | List connected physical devices and active simulators |
+| `teleport connect` | Test and verify connection health and tunnel latency (`--json`) |
+| `teleport locations` | List saved favorite places from Teleport GUI (`--json`) |
+| `teleport set <name>` | **Simulate location directly by favorite place name** |
+| `teleport set <lat> <lng>` | Simulate location by latitude and longitude |
+| `teleport status` | Display active background simulation sessions |
+| `teleport clear` | Clear simulated location and restore real GPS positioning |
+
+### AI Agent Skill Integration
+
+Teleport provides an AI skill (`teleport-location`) for agentic assistants. An AI agent can inspect your favorites, check connected devices, and change your iPhone's location through natural conversation (e.g., *"Change my location to my saved office bookmark"*).
 
 ## Development
 
