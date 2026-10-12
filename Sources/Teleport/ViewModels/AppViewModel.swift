@@ -88,6 +88,11 @@ final class AppViewModel {
             defaults.set(useXcodeEnvironment, forKey: AppViewModelPreferences.useXcodeEnvironment)
         }
     }
+    var requireAdminAuthorization: Bool {
+        didSet {
+            defaults.set(requireAdminAuthorization, forKey: AppViewModelPreferences.requireAdminAuthorization)
+        }
+    }
 
     @ObservationIgnored var movementLoopTask: Task<Void, Never>?
     @ObservationIgnored var routePlaybackTask: Task<Void, Never>?
@@ -99,6 +104,8 @@ final class AppViewModel {
         self.suppressUSBPrivilegeNotice = defaults.bool(forKey: AppViewModelPreferences.suppressUSBPrivilegeNotice)
         let storedXcodePref = defaults.object(forKey: AppViewModelPreferences.useXcodeEnvironment)
         self.useXcodeEnvironment = (storedXcodePref as? Bool) ?? true
+        let storedAdminPref = defaults.object(forKey: AppViewModelPreferences.requireAdminAuthorization)
+        self.requireAdminAuthorization = (storedAdminPref as? Bool) ?? false
         self.movementSpeedMetersPerSecond = Self.defaultMovementSpeedMetersPerSecond
         self.movementTickIntervalSeconds = Self.defaultMovementTickIntervalSeconds
         self.routePlaybackSpeedMultiplier = Self.defaultRoutePlaybackSpeedMultiplier
@@ -117,6 +124,16 @@ final class AppViewModel {
                 await disconnectSelectedDevice()
             }
             await refreshDevices()
+        }
+    }
+
+    func setRequireAdminAuthorization(_ enabled: Bool) {
+        guard requireAdminAuthorization != enabled else { return }
+        requireAdminAuthorization = enabled
+        defaults.set(enabled, forKey: AppViewModelPreferences.requireAdminAuthorization)
+        Task {
+            let usbService = registry.service(for: .physicalUSB) as? USBDeviceLocationService
+            await usbService?.setRequireAdminAuthorization(enabled)
         }
     }
 

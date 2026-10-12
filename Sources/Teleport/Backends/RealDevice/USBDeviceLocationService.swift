@@ -11,9 +11,16 @@ actor USBDeviceLocationService: LocationSimulationService {
     private let simulationRunner = USBDeviceSimulationRunner()
     private var useXcodeEnvironment: Bool =
         (UserDefaults.standard.object(forKey: AppViewModelPreferences.useXcodeEnvironment) as? Bool) ?? true
+    private var requireAdminAuthorization: Bool =
+        (UserDefaults.standard.object(forKey: AppViewModelPreferences.requireAdminAuthorization) as? Bool) ?? false
 
     func setUseXcodeEnvironment(_ enabled: Bool) {
         useXcodeEnvironment = enabled
+    }
+
+    func setRequireAdminAuthorization(_ enabled: Bool) {
+        requireAdminAuthorization = enabled
+        simulationRunner.setRequireAdminAuthorization(enabled)
     }
 
     func discoverDevices() async throws -> [Device] {

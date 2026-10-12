@@ -7,7 +7,7 @@ extension AppViewModel {
     }
 
     var selectedDeviceRequiresAdministratorApproval: Bool {
-        selectedDevice?.kind.isPhysicalDevice == true
+        requireAdminAuthorization && selectedDevice?.kind.isPhysicalDevice == true
     }
 
     var showsUSBApprovalReminder: Bool {
@@ -31,6 +31,7 @@ extension AppViewModel {
         do {
             let usbService = registry.service(for: .physicalUSB) as? USBDeviceLocationService
             await usbService?.setUseXcodeEnvironment(useXcodeEnvironment)
+            await usbService?.setRequireAdminAuthorization(requireAdminAuthorization)
 
             async let simulatorDevices =
                 useXcodeEnvironment
@@ -94,6 +95,10 @@ extension AppViewModel {
 
         TeleportLog.devices.info("Connecting to \(device.logLabel, privacy: .public)")
         statusMessage = .localized(TeleportStrings.connectingToDevice(device.name))
+
+        if let usbService = service as? USBDeviceLocationService {
+            await usbService.setRequireAdminAuthorization(requireAdminAuthorization)
+        }
 
         do {
             try await service.connect(to: device)
@@ -172,6 +177,9 @@ extension AppViewModel {
                 "No service available while simulating on \(device.logLabel, privacy: .public)"
             )
             return
+        }
+        if let usbService = service as? USBDeviceLocationService {
+            await usbService.setRequireAdminAuthorization(requireAdminAuthorization)
         }
         guard let latitude = Double(latitudeText),
             let longitude = Double(longitudeText)

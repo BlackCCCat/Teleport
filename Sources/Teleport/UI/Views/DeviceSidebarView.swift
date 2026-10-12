@@ -34,7 +34,7 @@ struct DeviceSidebarView: View {
         }
         .navigationTitle("Devices")
         .safeAreaInset(edge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Divider()
                 Toggle(
                     isOn: Binding(
@@ -51,6 +51,29 @@ struct DeviceSidebarView: View {
                             viewModel.useXcodeEnvironment
                                 ? TeleportStrings.useXcodeEnvironmentSubtitleOn
                                 : TeleportStrings.useXcodeEnvironmentSubtitleOff
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 16)
+
+                Toggle(
+                    isOn: Binding(
+                        get: { !viewModel.requireAdminAuthorization },
+                        set: { newValue in
+                            viewModel.setRequireAdminAuthorization(!newValue)
+                        }
+                    )
+                ) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(TeleportStrings.passwordlessSimulationTitle)
+                            .font(.subheadline.weight(.medium))
+                        Text(
+                            !viewModel.requireAdminAuthorization
+                                ? TeleportStrings.passwordlessSimulationSubtitleOn
+                                : TeleportStrings.passwordlessSimulationSubtitleOff
                         )
                         .font(.caption2)
                         .foregroundStyle(.secondary)

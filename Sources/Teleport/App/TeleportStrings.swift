@@ -388,6 +388,11 @@ enum TeleportStrings {
     static let useXcodeEnvironmentTitle: LocalizedStringResource = "Xcode Environment"
     static let useXcodeEnvironmentSubtitleOn: LocalizedStringResource = "Device connection via devicectl & simctl"
     static let useXcodeEnvironmentSubtitleOff: LocalizedStringResource = "Device connection via pymobiledevice3"
+    static let passwordlessSimulationTitle: LocalizedStringResource = "Passwordless Simulation"
+    static let passwordlessSimulationSubtitleOn: LocalizedStringResource =
+        "Rootless simulation without password or Touch ID"
+    static let passwordlessSimulationSubtitleOff: LocalizedStringResource =
+        "Requires administrator authorization (sudo)"
     static let connectDeviceViaUSBOrWifi: LocalizedStringResource = "Connect an iOS device via USB or Wi-Fi."
     static let connectDeviceOrLaunchSimulator: LocalizedStringResource = "Connect an iOS device or start a Simulator."
 }

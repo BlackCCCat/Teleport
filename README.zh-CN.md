@@ -20,6 +20,8 @@
 > **Fork 说明与改动：**
 > 本项目基于原版 [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport) 进行增强与定制：
 > - **解耦 Xcode 环境选项**：在应用左侧栏底部增加了“Xcode 环境”开关。关闭后，真机设备（USB 与 Wi-Fi）将完全通过 Python `pymobiledevice3` 纯协议栈发现与连接，**彻底摆脱对 Xcode 及 `xcrun devicectl` 的强依赖**。
+> - **免密码/免提权模拟选项**：在左侧栏底部新增“免密码提权模拟”开关，默认开启。采用 iOS 17+ 原生/用户态通道直连，**彻底告别每次模拟定位时频繁弹出管理员密码或 Touch ID 指纹验证的烦扰**。
+> - **独立 CLI 命令行工具与 AI Skill (`teleport`)**：新增轻量级 CLI 工具（`teleport devices` / `teleport set <lat> <lng>` / `teleport clear`），支持在不启动 Teleport 窗口的情况下进行设备连接与定位模拟，方便终端运维与 AI Agent 自动化调度。
 > - **状态持久化**：开关状态会自动记住（存储于 `UserDefaults`），重启应用或电脑后依旧保持上次设置。
 > - **自动打包发布**：新增 GitHub Actions 工作流，发布 GitHub Release 时自动编译打包 macOS `.dmg` 与 `.zip` 安装包。
 

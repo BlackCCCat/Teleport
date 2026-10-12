@@ -31,6 +31,36 @@
         }
       }
     },
+    "Passwordless Simulation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免密码提权模拟"
+          }
+        }
+      }
+    },
+    "Rootless simulation without password or Touch ID" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免提权运行，无需输入密码或 Touch ID"
+          }
+        }
+      }
+    },
+    "Requires administrator authorization (sudo)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用管理员权限 (sudo) 运行"
+          }
+        }
+      }
+    },
     "Connect an iOS device via USB or Wi-Fi." : {
       "localizations" : {
         "zh-Hans" : {

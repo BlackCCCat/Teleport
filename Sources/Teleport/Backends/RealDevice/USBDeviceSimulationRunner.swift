@@ -50,6 +50,12 @@ final class USBDeviceSimulationRunner {
 
     private var simulationHelper: USBSimulationHelper?
     private var cachedResolvedPythonEnvironment: ResolvedPythonEnvironment?
+    private var requireAdminAuthorization: Bool =
+        (UserDefaults.standard.object(forKey: AppViewModelPreferences.requireAdminAuthorization) as? Bool) ?? false
+
+    func setRequireAdminAuthorization(_ enabled: Bool) {
+        self.requireAdminAuthorization = enabled
+    }
 
     init(
         sudoURL: URL = URL(fileURLWithPath: "/usr/bin/sudo"),
@@ -318,25 +324,43 @@ final class USBDeviceSimulationRunner {
         let helperFiles = try USBDeviceScript.makeHelperFiles()
         let pythonEnvironment = try resolvedHelperPythonEnvironment(refresh: true)
         try validateResolvedPythonEnvironment(pythonEnvironment)
-        let administratorPassword = try administratorPasswordIfNeeded(using: helperFiles.promptScriptURL)
+        let administratorPassword =
+            requireAdminAuthorization
+            ? try administratorPasswordIfNeeded(using: helperFiles.promptScriptURL)
+            : nil
         let process = Process()
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
 
-        process.executableURL = sudoURL
-        process.arguments =
-            ["-S", "-p", "", envURL.path]
-            + helperEnvironmentAssignments(sitePaths: pythonEnvironment.sitePaths)
-            + [pythonEnvironment.executable]
-            + USBDeviceScript.helperArguments(
-                mode: mode,
-                device: device,
-                installCommand: pythonEnvironment.installCommand,
-                coordinate: coordinate,
-                statusURL: helperFiles.statusURL,
-                stopURL: helperFiles.stopURL
-            )
+        if requireAdminAuthorization {
+            process.executableURL = sudoURL
+            process.arguments =
+                ["-S", "-p", "", envURL.path]
+                + helperEnvironmentAssignments(sitePaths: pythonEnvironment.sitePaths)
+                + [pythonEnvironment.executable]
+                + USBDeviceScript.helperArguments(
+                    mode: mode,
+                    device: device,
+                    installCommand: pythonEnvironment.installCommand,
+                    coordinate: coordinate,
+                    statusURL: helperFiles.statusURL,
+                    stopURL: helperFiles.stopURL
+                )
+        } else {
+            process.executableURL = envURL
+            process.arguments =
+                helperEnvironmentAssignments(sitePaths: pythonEnvironment.sitePaths)
+                + [pythonEnvironment.executable]
+                + USBDeviceScript.helperArguments(
+                    mode: mode,
+                    device: device,
+                    installCommand: pythonEnvironment.installCommand,
+                    coordinate: coordinate,
+                    statusURL: helperFiles.statusURL,
+                    stopURL: helperFiles.stopURL
+                )
+        }
         process.standardInput = stdinPipe
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe

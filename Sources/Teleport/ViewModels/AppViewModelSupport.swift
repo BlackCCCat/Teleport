@@ -5,6 +5,7 @@ enum AppViewModelPreferences {
     static let savedRoutes = "savedRoutes"
     static let savedLocations = "savedLocations"
     static let useXcodeEnvironment = "useXcodeEnvironment"
+    static let requireAdminAuthorization = "requireAdminAuthorization"
 }
 
 struct MovementControlVector: Equatable, Sendable {

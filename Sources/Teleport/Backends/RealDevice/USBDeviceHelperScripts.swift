@@ -384,6 +384,48 @@ enum USBDeviceScript {
                 await maybe_await(lockdown.close())
 
 
+        async def run_ios17_tunnel(mode, udid, connection_type, status_path, stop_path, latitude, longitude):
+            DvtProvider = dvt_provider_class()
+            rsd = None
+
+            try:
+                write_status(status_path, "NATIVE_TUNNEL")
+                from pymobiledevice3.remote import native_tunnel
+                rsd = await maybe_await(native_tunnel.establish_native_rsd(serial=udid))
+            except Exception:
+                rsd = None
+
+            if rsd is None:
+                try:
+                    write_status(status_path, "USERSPACE_TUNNEL")
+                    from pymobiledevice3.remote import userspace_tunnel
+                    rsd = await maybe_await(userspace_tunnel.establish_userspace_rsd(serial=udid))
+                except Exception:
+                    rsd = None
+
+            if rsd is not None:
+                try:
+                    write_status(status_path, "DVT")
+                    async with DvtProvider(rsd) as dvt:
+                        simulation = await connected_location_simulation(dvt)
+                        await maybe_await(simulation.clear())
+                        if mode == "set":
+                            await maybe_await(simulation.set(latitude, longitude))
+                            mark_ready(status_path)
+                            await session_command_loop(simulation, stop_path)
+                        else:
+                            await maybe_await(simulation.clear())
+                finally:
+                    if hasattr(rsd, "close"):
+                        try:
+                            await maybe_await(rsd.close())
+                        except Exception:
+                            pass
+                return
+
+            await run_ios17_tcp(mode, udid, connection_type, status_path, stop_path, latitude, longitude)
+
+
         async def main():
             mode = sys.argv[1]
             udid = sys.argv[2]
@@ -401,12 +443,8 @@ enum USBDeviceScript {
 
             if parsed_version[0] < 17:
                 await run_pre_ios17(mode, udid, connection_type, status_path, stop_path, latitude, longitude)
-            elif device_kind == "physicalNetwork":
-                await run_ios17_tcp(mode, udid, connection_type, status_path, stop_path, latitude, longitude)
-            elif parsed_version < (17, 4):
-                await run_ios17_quic(mode, udid, status_path, stop_path, latitude, longitude)
             else:
-                await run_ios17_tcp(mode, udid, connection_type, status_path, stop_path, latitude, longitude)
+                await run_ios17_tunnel(mode, udid, connection_type, status_path, stop_path, latitude, longitude)
 
 
         try:

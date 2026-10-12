@@ -23,3 +23,8 @@ launch: build
 	pkill -x "$(SCHEME)" || true
 	sleep 0.5
 	open "$(APP_BUNDLE)"
+
+install-cli:
+	mkdir -p $(HOME)/.local/bin
+	ln -sf $(CURDIR)/bin/teleport $(HOME)/.local/bin/teleport
+	@echo "Installed teleport CLI to $(HOME)/.local/bin/teleport"

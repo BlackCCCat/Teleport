@@ -20,7 +20,9 @@
 > **Fork Differences / Improvements:**
 > This fork is based on [samuelhe52/Teleport](https://github.com/samuelhe52/Teleport).
 > - **Xcode Environment Toggle**: Added a toggle switch in the left sidebar to enable/disable Xcode environment dependency. When turned off, physical devices (USB & Wi-Fi) are discovered and connected purely via `pymobiledevice3`, allowing location simulation **without needing Xcode or `xcrun devicectl` installed**.
-> - **Persistent State**: The toggle state is remembered across application restarts (`UserDefaults`).
+> - **Passwordless Simulation (No Sudo/Touch ID Prompt)**: Added a toggle to run location simulation rootless. Using native/userspace tunnels, device location can be simulated immediately without prompting for administrator password or Touch ID every time.
+> - **Headless CLI & AI Skill (`teleport`)**: Added a standalone command-line tool (`teleport devices`, `teleport set <lat> <lng>`, `teleport clear`) that works without opening the GUI app, supporting automated control by scripts and AI agents.
+> - **Persistent State**: Toggle states are remembered across application restarts (`UserDefaults`).
 > - **Automated Release**: Added GitHub Actions workflow to automatically package and attach macOS `.dmg` and `.zip` bundles on GitHub Release.
 
 Teleport is built with SwiftUI and MapKit. Click somewhere on the map, hit Simulate, and your device thinks it's there.
