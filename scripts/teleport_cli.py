@@ -144,6 +144,103 @@ def discover_simulators() -> List[Dict]:
     return sims
 
 
+def load_saved_locations() -> List[Dict]:
+    """
+    Reads saved locations from Teleport's macOS UserDefaults (com.samuelhe.Teleport).
+    Returns a list of dicts with keys: 'name', 'latitude', 'longitude', 'id', 'created_at'.
+    """
+    import plistlib
+    raw_list = None
+
+    # 1. Try 'defaults export' for real-time cfprefsd synchronization
+    try:
+        proc = subprocess.run(
+            ["defaults", "export", "com.samuelhe.Teleport", "-"],
+            capture_output=True,
+            check=True
+        )
+        data = plistlib.loads(proc.stdout)
+        if "savedLocations" in data:
+            raw_val = data["savedLocations"]
+            if isinstance(raw_val, (bytes, bytearray)):
+                raw_list = json.loads(raw_val)
+            elif isinstance(raw_list, list):
+                raw_list = raw_val
+    except Exception:
+        pass
+
+    # 2. Fallback to direct plist file reading
+    if raw_list is None:
+        pref_path = Path.home() / "Library" / "Preferences" / "com.samuelhe.Teleport.plist"
+        if pref_path.exists():
+            try:
+                with open(pref_path, "rb") as f:
+                    data = plistlib.load(f)
+                if "savedLocations" in data:
+                    raw_val = data["savedLocations"]
+                    if isinstance(raw_val, (bytes, bytearray)):
+                        raw_list = json.loads(raw_val)
+                    elif isinstance(raw_val, list):
+                        raw_list = raw_val
+            except Exception:
+                pass
+
+    if not raw_list:
+        return []
+
+    results = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        coord = item.get("coordinate", {})
+        lat = coord.get("latitude") if isinstance(coord, dict) else item.get("latitude")
+        lng = coord.get("longitude") if isinstance(coord, dict) else item.get("longitude")
+        if lat is None or lng is None:
+            continue
+        results.append({
+            "id": str(item.get("id", "")),
+            "name": str(item.get("name", "Unnamed")),
+            "latitude": float(lat),
+            "longitude": float(lng),
+            "created_at": item.get("createdAt")
+        })
+    return results
+
+
+def find_saved_location(query: str) -> Tuple[Optional[Dict], List[Dict]]:
+    """
+    Finds a saved location matching the query.
+    Matches in order:
+      1. Exact name match
+      2. Case-insensitive exact match
+      3. Case-insensitive substring match
+    Returns (best_match_or_none, all_candidates)
+    """
+    locations = load_saved_locations()
+    if not locations:
+        return None, []
+
+    # 1. Exact match
+    for loc in locations:
+        if loc["name"] == query:
+            return loc, [loc]
+
+    # 2. Case-insensitive exact match
+    q_lower = query.strip().lower()
+    exact_ci = [loc for loc in locations if loc["name"].lower() == q_lower]
+    if len(exact_ci) == 1:
+        return exact_ci[0], exact_ci
+
+    # 3. Substring match
+    substr_matches = [loc for loc in locations if q_lower in loc["name"].lower()]
+    if len(substr_matches) == 1:
+        return substr_matches[0], substr_matches
+    elif len(substr_matches) > 1:
+        return None, substr_matches
+
+    return None, []
+
+
 def send_daemon_command(sock_path: Path, command: str) -> Optional[str]:
     import socket
     if not sock_path.exists():
@@ -360,13 +457,136 @@ def resolve_target_device(device_arg: Optional[str]) -> Tuple[Dict, bool]:
         sys.exit(1)
 
 
+def cmd_locations(args):
+    locations = load_saved_locations()
+    if args.json:
+        print(json.dumps(locations, indent=2, ensure_ascii=False))
+        return
+
+    if not locations:
+        print("No saved locations found.")
+        print("Tip: Add favorite locations in the Teleport GUI app.")
+        return
+
+    print("=== Teleport Saved Locations ===")
+    for idx, loc in enumerate(locations, 1):
+        print(f" {idx}. {loc['name']}: {loc['latitude']}, {loc['longitude']}")
+
+
+def cmd_connect(args):
+    device, is_simulator = resolve_target_device(args.device)
+    udid = device["id"]
+    name = device["name"]
+    dev_type = "Physical" if device["type"] == "physical" else "Simulator"
+
+    if not args.json:
+        print(f"Testing connection to [{dev_type}] '{name}' ({udid})...")
+
+    if is_simulator:
+        status_info = {
+            "id": udid,
+            "name": name,
+            "type": "simulator",
+            "state": device.get("state", "Unknown"),
+            "connected": True
+        }
+        if args.json:
+            print(json.dumps(status_info, indent=2, ensure_ascii=False))
+        else:
+            print(f"✓ Simulator is ready: {name} ({device.get('state', 'Unknown')})")
+            print("  Note: Location simulation connects automatically when running 'teleport set'.")
+        return
+
+    async def do_connect():
+        t0 = time.time()
+        provider = await get_service_provider(udid)
+        tunnel_type = type(provider).__name__
+        DvtProvider = dvt_provider_class()
+        async with DvtProvider(provider) as dvt:
+            from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
+            sim = LocationSimulation(dvt)
+            if hasattr(sim, "connect"):
+                await maybe_await(sim.connect())
+            elapsed = time.time() - t0
+            return {
+                "id": udid,
+                "name": name,
+                "type": "physical",
+                "transport": device.get("transport", "USB"),
+                "os_version": device.get("os_version", "iOS"),
+                "tunnel_provider": tunnel_type,
+                "latency_seconds": round(elapsed, 2),
+                "connected": True
+            }
+
+    try:
+        res = asyncio.run(do_connect())
+        if args.json:
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+        else:
+            print(f"✓ Connected successfully to '{name}'!")
+            print(f"  • UDID: {udid}")
+            print(f"  • OS: {res['os_version']}")
+            print(f"  • Transport: {res['transport']}")
+            print(f"  • Tunnel Provider: {res['tunnel_provider']}")
+            print(f"  • Handshake Latency: {res['latency_seconds']}s")
+            print("  Note: Normal 'teleport set' commands connect automatically without needing this step.")
+    except Exception as ex:
+        if args.json:
+            print(json.dumps({"id": udid, "name": name, "connected": False, "error": str(ex)}, indent=2))
+        else:
+            print(f"✗ Connection failed to '{name}': {ex}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_set(args):
     device, is_simulator = resolve_target_device(args.device)
     udid = device["id"]
     name = device["name"]
-    lat = float(args.latitude)
-    lng = float(args.longitude)
-    loc_name = args.name or ""
+
+    target = args.target.strip()
+    target_is_lat = False
+    lat_val = None
+
+    try:
+        lat_val = float(target)
+        target_is_lat = True
+    except ValueError:
+        target_is_lat = False
+
+    if target_is_lat and args.longitude is not None:
+        lat = lat_val
+        lng = float(args.longitude)
+        loc_name = args.name or ""
+    elif not target_is_lat:
+        # User passed a location name or keyword (e.g. "工作打卡")
+        matched_loc, candidates = find_saved_location(target)
+        if matched_loc:
+            lat = matched_loc["latitude"]
+            lng = matched_loc["longitude"]
+            loc_name = args.name or matched_loc["name"]
+        else:
+            if candidates:
+                print(f"Error: Ambiguous location query '{target}'. Multiple saved locations matched:", file=sys.stderr)
+                for c in candidates:
+                    print(f"  • {c['name']} ({c['latitude']}, {c['longitude']})", file=sys.stderr)
+            else:
+                saved = load_saved_locations()
+                print(f"Error: Location '{target}' not found in saved favorites.", file=sys.stderr)
+                if saved:
+                    print("Available saved locations in Teleport:", file=sys.stderr)
+                    for s in saved:
+                        print(f"  • {s['name']} ({s['latitude']}, {s['longitude']})", file=sys.stderr)
+                else:
+                    print("Tip: No saved locations found in Teleport yet. You can add favorites in Teleport app or pass coordinates directly.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # target is float, but longitude is missing
+        print(f"Error: Longitude is required when latitude ({lat_val}) is provided.", file=sys.stderr)
+        print("Usage:", file=sys.stderr)
+        print("  teleport set <latitude> <longitude> [-n <name>]", file=sys.stderr)
+        print("  teleport set <location_name_from_favorites>", file=sys.stderr)
+        sys.exit(1)
 
     if is_simulator:
         # Simulate via simctl
@@ -545,10 +765,19 @@ def main():
     p_dev = subparsers.add_parser("devices", aliases=["list"], help="List connected iOS devices and simulators")
     p_dev.add_argument("--json", action="store_true", help="Output in JSON format")
 
+    # locations
+    p_loc = subparsers.add_parser("locations", aliases=["favorites", "saved"], help="List saved favorite locations from Teleport")
+    p_loc.add_argument("--json", action="store_true", help="Output in JSON format")
+
+    # connect
+    p_conn = subparsers.add_parser("connect", aliases=["test"], help="Test and verify connection to an iOS device or simulator")
+    p_conn.add_argument("-d", "--device", type=str, help="Device UDID or name (auto-selected if only 1 device)")
+    p_conn.add_argument("--json", action="store_true", help="Output in JSON format")
+
     # set
-    p_set = subparsers.add_parser("set", help="Simulate location on a device")
-    p_set.add_argument("latitude", type=float, help="Latitude (e.g. 39.9042)")
-    p_set.add_argument("longitude", type=float, help="Longitude (e.g. 116.4074)")
+    p_set = subparsers.add_parser("set", help="Simulate location by coordinates or favorite name")
+    p_set.add_argument("target", help="Location name (from favorites, e.g. '工作打卡') or latitude (e.g. 34.7856)")
+    p_set.add_argument("longitude", nargs="?", type=float, default=None, help="Longitude (required if target is latitude)")
     p_set.add_argument("-d", "--device", type=str, help="Device UDID or name (auto-selected if only 1 device)")
     p_set.add_argument("-n", "--name", type=str, help="Human-readable location name (e.g. 'Beijing')")
     p_set.add_argument("--hold", action="store_true", help="Hold simulation in foreground (stop with Ctrl+C)")
@@ -577,6 +806,10 @@ def main():
 
     if args.command in ("devices", "list"):
         cmd_devices(args)
+    elif args.command in ("locations", "favorites", "saved"):
+        cmd_locations(args)
+    elif args.command in ("connect", "test"):
+        cmd_connect(args)
     elif args.command == "set":
         cmd_set(args)
     elif args.command == "clear":
